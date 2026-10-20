@@ -1,0 +1,35 @@
+# Bronze ingestion job (Databricks Asset Bundle format)
+#
+# Task 1 publishes the list of source tables as a task value.
+# Task 2 is a "For each" loop: it runs the generic ingestion notebook
+# once per table and passes the table name into the `src` parameter.
+# Task 3 ingests the real-time JSON order stream, in parallel with the batch sources.
+#
+# Deploy with:  databricks bundle deploy
+
+resources:
+  jobs:
+    bronze_ingestion:
+      name: bronze_ingestion
+
+      tasks:
+        - task_key: source_list
+          notebook_task:
+            notebook_path: ../pipelines/bronze/01_source_list.py
+
+        - task_key: ingest_each_source
+          depends_on:
+            - task_key: source_list
+          for_each_task:
+            inputs: "{{tasks.source_list.values.output_key}}"
+            concurrency: 3
+            task:
+              task_key: ingest_source
+              notebook_task:
+                notebook_path: ../pipelines/bronze/02_bronze_ingestion.py
+                base_parameters:
+                  src: "{{input.src}}"
+
+        - task_key: ingest_order_stream
+          notebook_task:
+            notebook_path: ../pipelines/bronze/03_bronze_orders_stream.py
